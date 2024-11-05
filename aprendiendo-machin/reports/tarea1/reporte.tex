@@ -1,0 +1,103 @@
+%% V1.0
+%% 2019/01/16
+%% This is the template for a Lab report following an IEEE paper. Modified by Francisco Tovar after Michael Sheel original document.
+
+%% This is a skeleton file demonstrating the use of IEEEtran.cls
+%% (requires IEEEtran.cls version 1.8b or later) with an IEEE
+%% journal paper.
+%%
+%% Support sites:
+%% http://www.michaelshell.org/tex/ieeetran/
+%% http://www.ctan.org/pkg/ieeetran
+%% and
+%% http://www.ieee.org/
+
+
+\documentclass[journal]{IEEEtran}
+
+% *** CITATION PACKAGES ***
+\usepackage[style=ieee]{biblatex} 
+\usepackage[spanish]{babel}
+\bibliography{references.bib}    %your file created using JabRef
+
+% *** MATH PACKAGES ***
+\usepackage{amsmath}
+
+% *** PDF, URL AND HYPERLINK PACKAGES ***
+\usepackage{url}
+% correct bad hyphenation here
+\hyphenation{op-tical net-works semi-conduc-tor}
+\usepackage{graphicx}  %needed to include png, eps figures
+\usepackage{float}  % used to fix location of images i.e.\begin{figure}[H]
+
+\begin{document}
+
+% paper title
+\title{Aplicaciones de Machine Learning en diseño de chips}
+
+% author names 
+\author {Braulio Isaac Martínez Aceves 747200
+        }% <-this % stops a space
+        
+% The report headers
+\markboth{MSC1007A Aprendizaje Automático, Tarea 1, 20 agosto 2024}%do not delete next lines
+{Shell \MakeLowercase{\textit{et al.}}: Bare Demo of IEEEtran.cls for IEEE Journals}
+
+% make the title area
+\maketitle
+
+%\begin{IEEEkeywords}
+%keywords, temperature, xxxx equation, etc.
+%\end{IEEEkeywords}
+
+\section{Introducción}
+% Here we have the typical use of a "W" for an initial drop letter
+% and "RITE" in caps to complete the first word.
+% You must have at least 2 lines in the paragraph with the drop letter
+% (should never be an issue)
+
+El desarrollo de chips es un proceso complejo que puede tomar años, entre sus etapas se encuentra el diseño físico, el cual es clave para asegurar el correcto y eficiente funcionamiento del circuito final. Entre las actividades de esta etapa está el posicionamiento de bloques funcionales (conocido como Chip Placement en inglés), el cual consiste en estratégicamente posicionar diferentes partes del chip para lograr la mejor métrica posible de PPA (Power, Performance and Area). Parte de su complejidad se debe al gran y creciente tamaño de diseños modernos y a la alta cantidad de nodos o conexiones entre los bloques internos de un chip, las cuales van hasta miles de millones.
+
+A pesar del inmenso número de conexiones a considerar, se sigue requiriendo alta precisión y granularidad en este proceso para evitar congestión en conexiones y asegurar una densidad ideal, aprovechando al máximo el espacio disponible en el chip. Esta tarea puede tomar semanas, requiriendo intervención humana, ajustes específicos dependiendo del diseño y múltiples iteraciones.
+
+Otra actividad es la síntesis lógica, que transforma descripciones de alto nivel de circuitos digitales en compuertas lógicas, ya que existen diferentes formas de realizar estas transformaciones, existe posibilidad de combinar o mejorar diferentes métodos para obtener mejores resultados en síntesis. Estas actividades (síntesis y Chip Placement) pueden beneficiarse de la aplicación de Machine Learning.
+
+\section{¿Cómo se hizo?}
+Se plantea el Chip Placement como un problema de aprendizaje por refuerzo (Reinforcement Learning) con un agente de red de políticas que se encarga de posicionar bloques de forma secuencial. Después, se usa un método dirigido por fuerzas (force-directed method) para colocar celdas estándar. La recompensa es una combinación lineal de la congestión y longitud de cables aproximada, lo cual es calculado y se proporciona a cada agente para optimizar sus parámetros en las siguientes iteraciones.\\
+
+En el estado inicial $ s_0 $ se cuenta con un chip vacío sin ningún posicionamiento previo, mientras que el estado final $ s_T $ consiste en una netlist con todos los bloques colocados. En cada iteración se coloca un bloque por lo que $ T $ es el número total de bloques en el diseño. En cada iteración con un paso de tiempo $ t $, el agente inicia en un estado ($s_t$), realiza una acción ($a_t$) que provoca un nuevo estado ($s_{t+1}$) y recibe una recompensa ($r_t$). Después de varias iteraciones la red de políticas aprende a tomar acciones que maximicen la recompensa. Fue necesario discretizar y seccionar el área del chip para una correcta representación en la función de recompensa \cite{mirhoseini2020chip}.\\
+
+Para la síntesis lógica se pueden encontrar diferentes técnicas: imágenes, aprendizaje por refuerzo, redes neuronales y aprendizaje lógico. Recientemente se ha explorado representar mapas de congestión o mapas de Karnaugh como imágenes, lo que permite tomar ventaja de herramientas como redes neuronales. Por ejemplo, es posible utilizar redes neuronales profundas simples donde dos capas internas interconectadas son alimentadas con imágenes generadas de mapas de Karnaugh, esto permite mejorar la optimización lógica al identificar áreas que pueden beneficiarse de ciertos circuitos específicos.
+
+Entre otras aplicaciones se encuentra la extracción de posibles estados de conmutación desde el RTL para predecir combinaciones y consumo energético, también se menciona el aprendizaje lógico, donde técnicas de machine learning aproximan la funcionalidad de un circuito con el objetivo de optimizar PPA o cumplir ciertos requisitos de área, potencia o frecuencia \cite{logic_synthesis}.
+
+
+\section{Ventajas del uso de Machine Learning}
+
+Existen varios beneficios al aplicar Machine Learning en estos procesos, se observa que se automatizan, aceleran y mejoran los resultados. En un caso se transformó una tarea realizada por personas que tomaba varias iteraciones y semanas de trabajo a un proceso con automatización con mejores resultados y que toma 6 horas \cite{mirhoseini2020chip}. También pueden acelerarse procesos como simulaciones de circuitos con precisión aceptable, permitiendo ciclos de desarrollo de chips más cortos. Un tema importante mencionado en estos trabajos es la disponibilidad de datos para aprendizaje, se observa una mejora considerable en la calidad y tiempo de ejecución en chip placement al considerar datasets más grandes, lo que puede incentivar a herramientas de diseño a integrar machine learning en sus flujos considerando la información de sus usuarios. 
+
+
+
+
+
+
+
+% if have a single appendix:
+%\appendix[Proof of the Zonklar Equations]
+% or
+%\appendix  % for no appendix heading
+% do not use \section anymore after \appendix, only \section*
+% is possibly needed
+
+% use appendices with more than one appendix
+% then use \section to start each appendix
+% you must declare a \section before using any
+% \subsection or using \label (\appendices by itself
+% starts a section numbered zero.)
+%
+
+
+\printbibliography
+\end{document}
+
+
