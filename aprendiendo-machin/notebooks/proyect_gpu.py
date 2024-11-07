@@ -129,10 +129,12 @@ def pipeline(ds,
     # Initialize an array to hold the grayscale images
     new_dataset = np.empty((len(ds), 32, 32), dtype=np.uint8)
 
-    if random_sample_id is None:
+    if (random_sample_id is None) and debug:
         random_sample_id = random.randint(0, len(ds))
-    original_random_image = ds[random_sample_id]
-    original_random_label = labels_ds[random_sample_id]
+    
+    if debug:
+        original_random_image = ds[random_sample_id]
+        original_random_label = labels_ds[random_sample_id]
 
     # Step 1: Convert images to grayscale
     gray_images = (color.rgb2gray(ds) * 255).astype(np.uint8)
@@ -260,57 +262,31 @@ class PreprocessingTransformer(BaseEstimator, TransformerMixin):
             debug=self.debug
         )
 
-        
+        # Flatten data
+        processed_data = processed_data.reshape(processed_data.shape[0], -1)
 
+        # Scale the data on GPU
+        processed_data = cuml_minmax_scale(processed_data, feature_range=(0, 1))
 
-clahe_clipLimit = 2
-clahe_tileGridSize = (1,1)
-sharpen_filter = (5,5)
-gaussian_sigma = 6
-extra_filter = "median"
+        # Convert to cudf DataFrame on GPU
+        processed_data = cudf.DataFrame.from_pandas(pd.DataFrame(processed_data)).to_cupy()
+        return processed_data
+
 
 # Feed to pipeline
-X_pca_train = pipeline(ds_train_images,
-                       ds_train["label"],
-                       clahe_clipLimit=clahe_clipLimit,
-                       clahe_tileGridSize=clahe_tileGridSize,
-                       sharpen_filter=sharpen_filter,
-                       gaussian_sigma=gaussian_sigma,
-                       extra_filter=extra_filter,
-                       debug=True)
-
-X_pca_test = pipeline(ds_test_images,
-                      ds_test["label"],
-                      clahe_clipLimit=clahe_clipLimit,
-                      clahe_tileGridSize=clahe_tileGridSize,
-                      sharpen_filter=sharpen_filter,
-                      gaussian_sigma=gaussian_sigma,
-                      extra_filter=extra_filter,
-                      debug=True)
-
-# Convert to grayscale (on GPU)
-#X_pca_train = (color.rgb2gray(ds_train_images) * 255).astype(np.uint8)
-#X_pca_test = (color.rgb2gray(ds_test_images) * 255).astype(np.uint8)
-
-# Flatten data
-X_pca_train = X_pca_train.reshape(X_pca_train.shape[0], -1)
-X_pca_test = X_pca_test.reshape(X_pca_test.shape[0], -1)
-
-# Scale the data on GPU
-X_pca_train = cuml_minmax_scale(X_pca_train, feature_range=(0, 1))
-X_pca_test = cuml_minmax_scale(X_pca_test, feature_range=(0, 1))
-
 Y_train = ds_train["label"]
 Y_test = ds_test["label"]
 
 # Convert to cudf DataFrame on GPU
-X_pca_train = cudf.DataFrame.from_pandas(pd.DataFrame(X_pca_train)).to_cupy()
-X_pca_test = cudf.DataFrame.from_pandas(pd.DataFrame(X_pca_test)).to_cupy()
-
 Y_train = cudf.DataFrame.from_pandas(pd.DataFrame(Y_train)).to_cupy().ravel()
 Y_test = cudf.DataFrame.from_pandas(pd.DataFrame(Y_test)).to_cupy().ravel()
 
 # Create GPU-accelerated versions of the models
+
+# Hyperparameter range for transformation
+gaussian_sigma_range = list(range(3, 7))
+extra_filtering_range = ['log', 'median']
+
 knn_range = list(range(30, 50))
 pca_range = list(range(20, 50))
 svm_c_range = [0.001, 0.01]  # Range of SVM regularization parameter (C)
@@ -342,26 +318,39 @@ best_params = {}
 
 # Iterate through possible values of PCA components and KNN neighbors
 if True:
-    for n_components in pca_range:
-        for n_neighbors in knn_range:
-            
-            # Update the PCA and KNN models with the current hyperparameters
-            knn_pipeline.set_params(pca__n_components=n_components, knn__n_neighbors=n_neighbors)
+    for n_gaussian_sigma in gaussian_sigma_range:
+        for n_filter in extra_filtering_range:
+            # Preprocess data
+            transformer = PreprocessingTransformer(gaussian_sigma=n_gaussian_sigma,
+                                                    extra_filter=n_filter)
+            X_pca_train = transformer.transform(ds_train_images)
+            X_pca_test  = transformer.transform(ds_test_images)
+            for n_components in pca_range:
+                for n_neighbors in knn_range:
+                    
+                    # Update the PCA and KNN models with the current hyperparameters
+                    knn_pipeline.set_params(pca__n_components=n_components,
+                                            knn__n_neighbors=n_neighbors)
 
-            # Fit the model on the GPU
-            knn_pipeline.fit(X_pca_train, Y_train)
+                    # Fit the model on the GPU
+                    knn_pipeline.fit(X_pca_train, Y_train)
 
-            # Get the accuracy score on the test set
-            score = knn_pipeline.score(X_pca_test, Y_test)
+                    # Get the accuracy score on the test set
+                    score = knn_pipeline.score(X_pca_test, Y_test)
 
-            # Store the best hyperparameters and score
-            if score > best_score:
-                best_score = score
-                best_params = {'pca__n_components': n_components, 'knn__n_neighbors': n_neighbors}
-            
-            print(f'Finished PCA component:{n_components}, n_neighbors:{n_neighbors}, score:{score}')
-            cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
-            gc.collect()  # Run garbage collection to clear Python memory
+                    current_params = {'preprocessing__gaussian_sigma' : n_gaussian_sigma,
+                                      'preprocessing__extra_filter' : n_filter,
+                                      'pca__n_components': n_components,
+                                      'knn__n_neighbors': n_neighbors}
+
+                    # Store the best hyperparameters and score
+                    if score > best_score:
+                        best_score = score
+                        best_params = current_params
+                    
+                    print(f'Finished {current_params} | score:{score}')
+                    cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
+                    gc.collect()  # Run garbage collection to clear Python memory
 
 # Iterate through possible values of PCA components and SVM hyperparameters (C and kernel)
 if False:
