@@ -112,6 +112,7 @@ def pipeline(ds,
              clahe_clipLimit=2.0,
              clahe_tileGridSize=(3,3),
              sharpen_filter=(5,5),
+             use_gaussian_mask=True,
              gaussian_sigma=6,
              extra_filter=None,
              random_sample_id= None,
@@ -174,10 +175,12 @@ def pipeline(ds,
         contour_image = find_contours(binary_image)
 
         # Gaussian filter
-        masked_image_scaled, mask = apply_gaussian_filter(binary_image, gaussian_sigma)
+        masked_image_scaled = binary_image
+        if use_gaussian_mask:
+            masked_image_scaled, mask = apply_gaussian_filter(binary_image, gaussian_sigma)
 
         new_dataset[i] = masked_image_scaled
-
+        
         # Log filter
         # log_filtered_image = apply_log_filter(median_filtered_image)
 
@@ -232,12 +235,19 @@ def pipeline(ds,
 
 
 class PreprocessingTransformer(BaseEstimator, TransformerMixin):
-    def __init__(self, clahe_clipLimit=2.0, clahe_tileGridSize=(3, 3), sharpen_filter=(5, 5), 
-                 gaussian_sigma=6, extra_filter=None, random_sample_id=None, debug=False):
+    def __init__(self, clahe_clipLimit=2.0,
+                 clahe_tileGridSize=(3, 3),
+                 sharpen_filter=(5, 5),
+                 use_gaussian_mask=True,
+                 gaussian_sigma=6,
+                 extra_filter=None,
+                 random_sample_id=None,
+                 debug=False):
         # Store preprocessing parameters
         self.clahe_clipLimit = clahe_clipLimit
         self.clahe_tileGridSize = clahe_tileGridSize
         self.sharpen_filter = sharpen_filter
+        self.use_gaussian_mask = use_gaussian_mask
         self.gaussian_sigma = gaussian_sigma
         self.extra_filter = extra_filter
         self.random_sample_id = random_sample_id
@@ -255,7 +265,8 @@ class PreprocessingTransformer(BaseEstimator, TransformerMixin):
             labels_ds=y, 
             clahe_clipLimit=self.clahe_clipLimit, 
             clahe_tileGridSize=self.clahe_tileGridSize, 
-            sharpen_filter=self.sharpen_filter, 
+            sharpen_filter=self.sharpen_filter,
+            use_gaussian_mask=self.use_gaussian_mask,
             gaussian_sigma=self.gaussian_sigma, 
             extra_filter=self.extra_filter, 
             random_sample_id=self.random_sample_id,
@@ -273,6 +284,11 @@ class PreprocessingTransformer(BaseEstimator, TransformerMixin):
         return processed_data
 
 
+# Test
+#transformer = PreprocessingTransformer(gaussian_sigma=6,
+#                                                    extra_filter='median')
+#X_pca_train = transformer.transform(np.expand_dims(ds_train_images[0], axis=0))
+
 # Feed to pipeline
 Y_train = ds_train["label"]
 Y_test = ds_test["label"]
@@ -284,14 +300,15 @@ Y_test = cudf.DataFrame.from_pandas(pd.DataFrame(Y_test)).to_cupy().ravel()
 # Create GPU-accelerated versions of the models
 
 # Hyperparameter range for transformation
-gaussian_sigma_range = list(range(3, 7))
-extra_filtering_range = ['log', 'median']
+gaussian_mask_range = [True]
+gaussian_sigma_range = list(range(1, 10))
+extra_filtering_range = ['median']
 
-knn_range = list(range(30, 50))
-pca_range = list(range(20, 50))
-svm_c_range = [0.001, 0.01]  # Range of SVM regularization parameter (C)
+knn_range = [30]
+pca_range = [47]
+svm_c_range = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1]  # Range of SVM regularization parameter (C)
 svm_kernel_range = ['linear', 'rbf']  # SVM kernels
-umap_range = list(range(20,25))  # Different values of UMAP components you want to test
+umap_range = list(range(35,38))  # Different values of UMAP components you want to test
 
 # Create GPU-accelerated PCA, KNN, and SVC pipelines
 knn_pipeline = Pipeline(
@@ -318,39 +335,42 @@ best_params = {}
 
 # Iterate through possible values of PCA components and KNN neighbors
 if True:
-    for n_gaussian_sigma in gaussian_sigma_range:
-        for n_filter in extra_filtering_range:
-            # Preprocess data
-            transformer = PreprocessingTransformer(gaussian_sigma=n_gaussian_sigma,
-                                                    extra_filter=n_filter)
-            X_pca_train = transformer.transform(ds_train_images)
-            X_pca_test  = transformer.transform(ds_test_images)
-            for n_components in pca_range:
-                for n_neighbors in knn_range:
-                    
-                    # Update the PCA and KNN models with the current hyperparameters
-                    knn_pipeline.set_params(pca__n_components=n_components,
-                                            knn__n_neighbors=n_neighbors)
+    for n_use_gaussian in gaussian_mask_range:
+        for index, n_gaussian_sigma in enumerate(gaussian_sigma_range):
+            for n_filter in extra_filtering_range:
+                # Preprocess data
+                transformer = PreprocessingTransformer(gaussian_sigma=n_gaussian_sigma,
+                                                       use_gaussian_mask=n_use_gaussian,
+                                                       extra_filter=n_filter)
+                X_pca_train = transformer.transform(ds_train_images)
+                X_pca_test  = transformer.transform(ds_test_images)
+                for n_components in pca_range:
+                    for n_neighbors in knn_range:
+                        
+                        # Update the PCA and KNN models with the current hyperparameters
+                        knn_pipeline.set_params(pca__n_components=n_components,
+                                                knn__n_neighbors=n_neighbors)
 
-                    # Fit the model on the GPU
-                    knn_pipeline.fit(X_pca_train, Y_train)
+                        # Fit the model on the GPU
+                        knn_pipeline.fit(X_pca_train, Y_train)
 
-                    # Get the accuracy score on the test set
-                    score = knn_pipeline.score(X_pca_test, Y_test)
+                        # Get the accuracy score on the test set
+                        score = knn_pipeline.score(X_pca_test, Y_test)
 
-                    current_params = {'preprocessing__gaussian_sigma' : n_gaussian_sigma,
-                                      'preprocessing__extra_filter' : n_filter,
-                                      'pca__n_components': n_components,
-                                      'knn__n_neighbors': n_neighbors}
+                        current_params = {'preprocessing__use_gaussian_mask' : n_use_gaussian,
+                                          'preprocessing__gaussian_sigma' : n_gaussian_sigma,
+                                          'preprocessing__extra_filter' : n_filter,
+                                          'pca__n_components': n_components,
+                                          'knn__n_neighbors': n_neighbors}
 
-                    # Store the best hyperparameters and score
-                    if score > best_score:
-                        best_score = score
-                        best_params = current_params
-                    
-                    print(f'Finished {current_params} | score:{score}')
-                    cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
-                    gc.collect()  # Run garbage collection to clear Python memory
+                        # Store the best hyperparameters and score
+                        if score > best_score:
+                            best_score = score
+                            best_params = current_params
+                        
+                        print(f'Finished {current_params} | score:{score}')
+                        #cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
+                        #gc.collect()  # Run garbage collection to clear Python memory
 
 # Iterate through possible values of PCA components and SVM hyperparameters (C and kernel)
 if False:
@@ -377,29 +397,48 @@ if False:
                 gc.collect()  # Run garbage collection to clear Python memory
 
 if False:
-    for n_components in umap_range:
-        for C in svm_c_range:
-            for kernel in svm_kernel_range:
-                # Update the UMAP and SVM models with the current hyperparameters
-                svm_pipeline.set_params(umap__n_components=n_components, svm__C=C)
+    for n_gaussian_sigma in gaussian_sigma_range:
+        for n_filter in extra_filtering_range:
+            # Preprocess data
+            transformer = PreprocessingTransformer(gaussian_sigma=n_gaussian_sigma,
+                                                    extra_filter=n_filter)
+            X_pca_train = transformer.transform(ds_train_images)
+            X_pca_test  = transformer.transform(ds_test_images)
+            for n_components in umap_range:
+                for C in svm_c_range:
+                    for kernel in svm_kernel_range:
 
-                # Fit the model on the GPU
-                svm_pipeline.fit(X_pca_train, Y_train)
+                        svm_pipeline = Pipeline(steps=[
+                                                    ('umap', UMAP(n_components=3)),  # Use cuML's UMAP for GPU acceleration
+                                                    ('svm', cuSVC())   # Use cuSVC for GPU acceleration
+                                                ])
+                        
+                        # Update the UMAP and SVM models with the current hyperparameters
+                        svm_pipeline.set_params(umap__n_components=n_components,
+                                                svm__C=C,
+                                                svm__kernel=kernel)
 
-                # Get the accuracy score on the test set
-                score = svm_pipeline.score(X_pca_test, Y_test)
+                        # Fit the model on the GPU
+                        svm_pipeline.fit(X_pca_train, Y_train)
 
-                print(f'Finished UMAP components:{n_components}, svm_c:{C}, svm_kernel:{kernel} score:{score}')
+                        # Get the accuracy score on the test set
+                        score = svm_pipeline.score(X_pca_test, Y_test)
 
-                # Store the best hyperparameters and score
-                if score > best_score:
-                    best_score = score
-                    best_params = {'umap__n_components': n_components, 'svm__C': C}
-                
-                 # Free GPU memory after each iteration
-                #del svm_pipeline  # Delete the pipeline object
-                cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
-                gc.collect()  # Run garbage collection to clear Python memory
+                        current_params = {'preprocessing__gaussian_sigma' : n_gaussian_sigma,
+                                        'preprocessing__extra_filter' : n_filter,
+                                        'umap__n_components': n_components,
+                                        'svm__C': C,
+                                        'svm__kernel' : kernel}
+
+                        # Store the best hyperparameters and score
+                        if score > best_score:
+                            best_score = score
+                            best_params = current_params
+                        
+                        print(f'Finished {current_params} | score:{score}')
+                        cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
+                        gc.collect()  # Run garbage collection to clear Python memory
+                        del svm_pipeline
 
 # Output the best hyperparameters and score
 print(f"Best parameters: {best_params}")
@@ -411,3 +450,8 @@ print(f"Best score: {best_score}")
 
 #Best parameters: {'pca__n_components': 48, 'knn__n_neighbors': 31}
 #Best score: 0.6881146430969238
+
+#Finished {'preprocessing__gaussian_sigma': 6, 'preprocessing__extra_filter': 'median', 'pca__n_components': 49, 'knn__n_neighbors': 31} | score:0.7254148721694946
+
+#Best parameters: {'preprocessing__gaussian_sigma': 6, 'preprocessing__extra_filter': 'median', 'pca__n_components': 47, 'knn__n_neighbors': 30}
+#Best score: 0.7265673279762268
