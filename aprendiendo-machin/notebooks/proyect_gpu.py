@@ -19,13 +19,17 @@ from cuml.svm import LinearSVC as cuLinearSVC
 from cuml.neighbors import KNeighborsClassifier as cuKNN
 from cuml.svm import SVC as cuSVC
 from cuml.manifold import UMAP
+from cuml.manifold import TSNE
 from cuml.model_selection import train_test_split
+from cuml.linear_model import LogisticRegression as cuLogisticRegression
 from sklearn.pipeline import Pipeline
 import cudf
 import pandas as pd
 import os
 import cupy as cp
 import gc
+
+import sys
 
 from sklearn.base import BaseEstimator, TransformerMixin
 
@@ -302,13 +306,25 @@ Y_test = cudf.DataFrame.from_pandas(pd.DataFrame(Y_test)).to_cupy().ravel()
 # Hyperparameter range for transformation
 gaussian_mask_range = [True]
 gaussian_sigma_range = list(range(1, 10))
+gaussian_sigma_range = [6]
 extra_filtering_range = ['median']
 
 knn_range = [30]
+knn_range = list(range(30,100))
 pca_range = [47]
+pca_range = list(range(1,60))
 svm_c_range = [0.00001, 0.0001, 0.001, 0.01, 0.1, 1]  # Range of SVM regularization parameter (C)
 svm_kernel_range = ['linear', 'rbf']  # SVM kernels
-umap_range = list(range(35,38))  # Different values of UMAP components you want to test
+umap_range = list(range(1,10))  # Different values of UMAP components you want to test
+
+# Logistic regression hyperparameter grid
+log_c_range = [0.0001, 0.001, 0.01, 0.1, 1, 10]  # Regularization parameter range
+log_max_iter_range = [100, 1000, 10000]  # Maximum iterations
+
+# Hyperparameters for t-SNE and KNN
+tsne_perplexity_range = [5, 10, 20, 30]  # t-SNE perplexity values
+tsne_learning_rate_range = [1, 10, 100, 1000]  # t-SNE learning rates
+tsne_n_iter_range = [500, 1000, 10000]  # t-SNE max iterations
 
 # Create GPU-accelerated PCA, KNN, and SVC pipelines
 knn_pipeline = Pipeline(
@@ -325,16 +341,35 @@ knn_pipeline = Pipeline(
 
 svm_pipeline = Pipeline(
     steps=[
-        ('umap', UMAP(n_components=3)),  # Use cuML's UMAP for GPU acceleration
+        ('pca', cuPCA()),  # Use cuML's UMAP for GPU acceleration
         ('svm', cuSVC())   # Use cuSVC for GPU acceleration
     ])
+
+# Logistic regression pipeline
+log_pipeline = Pipeline(
+    steps=[
+        ('pca',     cuPCA()),  # UMAP for dimensionality reduction
+        ('log_reg', cuLogisticRegression())  # Logistic Regression using cuML
+    ]
+)
+
+# Create a pipeline with t-SNE and KNN
+tsne_knn_pipeline = Pipeline(
+    steps=[
+        ('knn', cuKNN())   # Use cuKNN for GPU acceleration
+    ]
+)
 
 # Manually implement grid search on the GPU (since GridSearchCV isn't supported in cuML)
 best_score = -np.inf
 best_params = {}
 
+cv_to_run = "PCA_AND_KNN"
+if len(sys.argv) > 1:
+    cv_to_run = sys.argv[1]
+
 # Iterate through possible values of PCA components and KNN neighbors
-if True:
+if cv_to_run == "PCA_AND_KNN":
     for n_use_gaussian in gaussian_mask_range:
         for index, n_gaussian_sigma in enumerate(gaussian_sigma_range):
             for n_filter in extra_filtering_range:
@@ -373,30 +408,49 @@ if True:
                         #gc.collect()  # Run garbage collection to clear Python memory
 
 # Iterate through possible values of PCA components and SVM hyperparameters (C and kernel)
-if False:
-    for n_components in pca_range:
-        for C in svm_c_range:
-            for kernel in svm_kernel_range:
-                # Update the PCA and SVM models with the current hyperparameters
-                svm_pipeline.set_params(pca__n_components=n_components, svm__C=C, svm__kernel=kernel)
+if cv_to_run == "PCA_AND_SVM":
+    for n_use_gaussian in gaussian_mask_range:
+        for index, n_gaussian_sigma in enumerate(gaussian_sigma_range):
+            for n_filter in extra_filtering_range:
+                # Preprocess data
+                transformer = PreprocessingTransformer(gaussian_sigma=n_gaussian_sigma,
+                                                       use_gaussian_mask=n_use_gaussian,
+                                                       extra_filter=n_filter)
+                X_pca_train = transformer.transform(ds_train_images)
+                X_pca_test  = transformer.transform(ds_test_images)
+                for n_components in pca_range:
+                    for C in svm_c_range:
+                        for kernel in svm_kernel_range:
+                            # Update the PCA and SVM models with the current hyperparameters
+                            svm_pipeline.set_params(pca__n_components=n_components, svm__C=C, svm__kernel=kernel)
 
-                # Fit the model on the GPU
-                svm_pipeline.fit(X_pca_train, Y_train)
+                            # Fit the model on the GPU
+                            svm_pipeline.fit(X_pca_train, Y_train)
 
-                # Get the accuracy score on the test set
-                score = svm_pipeline.score(X_pca_test, Y_test)
+                            # Get the accuracy score on the test set
+                            score = svm_pipeline.score(X_pca_test, Y_test)
 
-                print(f'Finished PCA components:{n_components}, svm_c:{C}, svm_kernel:{kernel} score:{score}')
+                            current_params = {'preprocessing__use_gaussian_mask' : n_use_gaussian,
+                                          'preprocessing__gaussian_sigma' : n_gaussian_sigma,
+                                          'preprocessing__extra_filter' : n_filter,
+                                          'pca__n_components': n_components,
+                                          'svm__C': C,
+                                          'svm__kernel': kernel,
+                            }
 
-                # Store the best hyperparameters and score
-                if score > best_score:
-                    best_score = score
-                    best_params = {'pca__n_components': n_components, 'svm__C': C, 'svm__kernel': kernel}
-                
-                cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
-                gc.collect()  # Run garbage collection to clear Python memory
 
-if False:
+                            print(f'Finished {current_params} | score:{score}')
+
+                            # Store the best hyperparameters and score
+                            if score > best_score:
+                                best_score = score
+                                best_params = current_params
+                            
+                            cp.get_default_memory_pool().free_all_blocks()  # Clear GPU memory
+                            gc.collect()  # Run garbage collection to clear Python memory
+
+# Iterate through possible values of UMAP and SVM hyperparameters
+if cv_to_run == "UMAP_AND_SVM":
     for n_gaussian_sigma in gaussian_sigma_range:
         for n_filter in extra_filtering_range:
             # Preprocess data
@@ -409,7 +463,7 @@ if False:
                     for kernel in svm_kernel_range:
 
                         svm_pipeline = Pipeline(steps=[
-                                                    ('umap', UMAP(n_components=3)),  # Use cuML's UMAP for GPU acceleration
+                                                    ('umap', UMAP()),  # Use cuML's UMAP for GPU acceleration
                                                     ('svm', cuSVC())   # Use cuSVC for GPU acceleration
                                                 ])
                         
@@ -440,9 +494,102 @@ if False:
                         gc.collect()  # Run garbage collection to clear Python memory
                         del svm_pipeline
 
+# Try with logistic regression
+# Iterate through possible values of PCA components and KNN neighbors
+if cv_to_run == "PCA_AND_LOGISTIC":
+    for n_use_gaussian in gaussian_mask_range:
+        for n_gaussian_sigma in gaussian_sigma_range:
+            for n_filter in extra_filtering_range:
+                # Preprocess data
+                transformer = PreprocessingTransformer(
+                    gaussian_sigma=n_gaussian_sigma,
+                    use_gaussian_mask=n_use_gaussian,
+                    extra_filter=n_filter
+                )
+                X_train_processed = transformer.transform(ds_train_images)
+                X_test_processed = transformer.transform(ds_test_images)
+
+                for n_components in pca_range:
+                    for c in log_c_range:
+                        for max_iter in log_max_iter_range:
+                            # Update pipeline hyperparameters
+                            log_pipeline.set_params(
+                                pca__n_components=n_components,
+                                log_reg__C=c,
+                                log_reg__max_iter=max_iter
+                            )
+
+                            # Fit the model
+                            log_pipeline.fit(X_train_processed, Y_train)
+
+                            # Evaluate on the test set
+                            score = log_pipeline.score(X_test_processed, Y_test)
+
+                            current_params = {
+                                'preprocessing__use_gaussian_mask': n_use_gaussian,
+                                'preprocessing__gaussian_sigma': n_gaussian_sigma,
+                                'preprocessing__extra_filter': n_filter,
+                                'umap__n_components': n_components,
+                                'log_reg__C': c,
+                                'log_reg__max_iter': max_iter
+                            }
+
+                            # Update the best parameters and score
+                            if score > best_score:
+                                best_score = score
+                                best_params = current_params
+
+                            print(f'Finished {current_params} | Score: {score}')
+
+if cv_to_run == "TSNE_AND_KNN":
+    # Iterate through hyperparameters
+    for n_use_gaussian in gaussian_mask_range:
+        for index, n_gaussian_sigma in enumerate(gaussian_sigma_range):
+            for n_filter in extra_filtering_range:
+                # Preprocess data
+                transformer = PreprocessingTransformer(gaussian_sigma=n_gaussian_sigma,
+                                                       use_gaussian_mask=n_use_gaussian,
+                                                       extra_filter=n_filter)
+                X_pre_train = transformer.transform(ds_train_images)
+                X_pre_test  = transformer.transform(ds_test_images)
+                for perplexity in tsne_perplexity_range:
+                    for learning_rate in tsne_learning_rate_range:
+                        for n_iter in tsne_n_iter_range:
+                            for n_neighbors in knn_range:
+                                # Update the t-SNE and KNN models with the current hyperparameters
+                                tsne_knn_pipeline.set_params(
+                                    knn__n_neighbors=n_neighbors
+                                )
+
+                                tsne_model = TSNE(perplexity=perplexity,
+                                                   learning_rate=learning_rate,
+                                                   n_iter=n_iter)
+                                X_pre_train = tsne_model.fit_transform(X_pre_train)
+                                X_pre_test  = tsne_model.fit_transform(X_pre_test)
+                                # Fit the pipeline on the training data
+                                tsne_knn_pipeline.fit(X_pre_train, Y_train)
+
+                                # Evaluate on the test data
+                                score = tsne_knn_pipeline.score(X_pre_test, Y_test)
+
+                                current_params = {'preprocessing__use_gaussian_mask' : n_use_gaussian,
+                                          'preprocessing__gaussian_sigma' : n_gaussian_sigma,
+                                          'preprocessing__extra_filter' : n_filter,
+                                          'tsne__perplexity': perplexity,
+                                          'tsne__learning_rate': learning_rate,
+                                          'tsne__n_iter': n_iter,
+                                          'knn__n_neighbors': n_neighbors}
+
+                                # Save the best parameters and score
+                                if score > best_score:
+                                    best_score = score
+                                    best_params = current_params
+
+                                print(f'Finished {current_params} | score:{score}')
+
 # Output the best hyperparameters and score
-print(f"Best parameters: {best_params}")
-print(f"Best score: {best_score}")
+print(f"{cv_to_run} | Best parameters: {best_params}")
+print(f"{cv_to_run} | Best score: {best_score}")
 
 # With stupid pre-processing
 #Best parameters: {'pca__n_components': 49, 'knn__n_neighbors': 31}
@@ -455,3 +602,7 @@ print(f"Best score: {best_score}")
 
 #Best parameters: {'preprocessing__gaussian_sigma': 6, 'preprocessing__extra_filter': 'median', 'pca__n_components': 47, 'knn__n_neighbors': 30}
 #Best score: 0.7265673279762268
+
+
+#Best parameters: {'preprocessing__use_gaussian_mask': True, 'preprocessing__gaussian_sigma': 6, 'preprocessing__extra_filter': 'median', 'pca__n_components': 57, 'knn__n_neighbors': 19}
+#Best score: 0.732291042804718
