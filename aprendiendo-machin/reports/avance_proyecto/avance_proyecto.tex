@@ -366,7 +366,7 @@ accuracy_score(Y_train, Y_train_predict.get())
 \end{figure}
 
 \section{Matriz de confusión y balanceo de dataset}
-En los experimentos iniciales se logró observar un desbalanceo en el dataset de entrenamiento ya que el dígito 1 tenía significativamente más muestras que los otros dígitos en el dataset. Esto podría implicar un problema en el que no se representan de forma uniforme todas las posibles etiquetas de nuestros datos. La matriz de confusión muestra este comportamiento.
+En los experimentos iniciales se logró observar un desbalanceo en el dataset de entrenamiento, ya que el dígito 1 tenía significativamente más muestras que los otros dígitos en el dataset. Esto podría implicar un problema en el que no se representan de forma uniforme todas las posibles etiquetas de nuestros datos. La matriz de confusión muestra este comportamiento.
 
 \begin{figure}[H]
         \centering
@@ -375,7 +375,7 @@ En los experimentos iniciales se logró observar un desbalanceo en el dataset de
         \label{fig:confusion_matrix_pre_smote}
 \end{figure}
 
-Se utilió SMOTE\cite{smote2023} para balancear el dataset. La tarea de Cross-Valiation se hizo con el dataset de training original, la validación se realizó con SMOTE. Sólo logró observarse una ligera degradación en el score de aproximadamente \textbf{1\%}. Una vez aplicado este aumento de datos, se observa una matriz de confusión balanceada.
+Se utilió SMOTE\cite{smote2023} para balancear el dataset. La tarea de Cross-Validation se hizo con el dataset de training original, la validación se realizó con SMOTE. Solo logró observarse una ligera degradación en el score de aproximadamente \textbf{1\%}. Una vez aplicado este aumento de datos, se observa una matriz de confusión balanceada.
 
 \begin{figure}[H]
         \centering
@@ -384,7 +384,7 @@ Se utilió SMOTE\cite{smote2023} para balancear el dataset. La tarea de Cross-Va
         \label{fig:confusion_matrix_post_smote}
 \end{figure}
 
-El dataset Test muestra el mismo comportamiento, sin embargo no se aplicó SMOTE a este dataset ya que es usado para validación, no para entrenamiento.
+El dataset Test muestra el mismo comportamiento, sin embargo no se aplicó SMOTE a este dataset, ya que es usado para validación, no para entrenamiento.
 
 \begin{figure}[H]
         \centering
@@ -399,9 +399,9 @@ El dataset Test muestra el mismo comportamiento, sin embargo no se aplicó SMOTE
 Se propone una serie de pasos para transformar de distintas formas cada muestra del dataset. Visualmente y en varios ejemplos se observa cómo cada proceso modifica la información y podría permitir una extracción o representación más concisa del objetivo final. En los esfuerzos iniciales se consideró detección de contornos, pero esta transformación fue descartada porque impactaba negativamente el rendimiento. Se demuestra también el impacto de estos pasos de preprocesamiento, ya que el score con una simple conversión a escala de grises tiene un valor bajo (0.57 vs 0.79).
 
 \subsection{Reducción de dimensionalidad}
-Siguiendo el ejemplo con datasets como MNIST, se experimentó con modelos no supervisados que ayudan a reducir las dimensiones (PCA, UMAP, tSNE). A pesar de ser un problema similar para reconocimieno de dígitos, el dataset SVHN representa complicaciones por su variedad de colores, dígitos o elementos distractores además de inconsistencia entre el color o luminosidad de el fondo y dígito.
+Siguiendo el ejemplo con datasets como MNIST, se experimentó con modelos no supervisados que ayudan a reducir las dimensiones (PCA, UMAP, tSNE). A pesar de ser un problema similar para reconocimiento de dígitos, el dataset SVHN representa complicaciones por su variedad de colores, dígitos o elementos distractores además de inconsistencia entre el color o luminosidad del fondo y dígito.
 
-Las gráficas 2D y 3D en los diferentes modelos muestran dificultad para observar grupos bien definidos y separados, lo que sugiere que este problema necesita más dimensiones que las observables. Una vez se realizó CrossValidation es posible confirmar que el número de componentes con mejor redimiento es bastante alejado a las dimensiones que se pueden observar fácilmente, el hiperparámetro componentes PCA tuvo un valor final de 57.
+Las gráficas 2D y 3D en los diferentes modelos muestran dificultad para observar grupos bien definidos y separados, lo que sugiere que este problema necesita más dimensiones que las observables. Una vez se realizó CrossValidation es posible confirmar que el número de componentes con mejor rendimiento es bastante alejado a las dimensiones que se pueden observar fácilmente, el hiperparámetro componentes PCA tuvo un valor final de 57.
 
 \subsection{Selección de modelos y Cross-Validation}
 La aceleración con CUDA resultó crucial para este proceso, ya que las iteraciones utilizando CPU eran significativamente más lentas. Esto permitió explorar varios modelos y un rango más amplio de hiperparámetros.
