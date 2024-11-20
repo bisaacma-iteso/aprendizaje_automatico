@@ -71,20 +71,20 @@
 % You must have at least 2 lines in the paragraph with the drop letter
 % (should never be an issue)
 
-El dataset SVHN representa dígitos en imágenes naturales que provienen de fotografías de casas. Detectar y leer texto en fotografías representa un problema complicado en la disciplina de visión por computadora. Si bien algunos problemas de reconocimiento de caracteres bien delimitados se encuentran resueltos (OCR, reconocimiento de dígitos escritos a mano), el reconocimiento en escenas o imágenes naturales representa un reto mayor debido a los artefactos, ruido o distractores naturales.\cite{svhn} Estas características presentan al dataset como un buen candidato para temas de machine learning.
+El dataset SVHN representa dígitos en imágenes naturales que provienen de fotografías de casas obtenidas de Google Maps. Detectar y leer texto en fotografías representa un problema complicado en la disciplina de visión por computadora. Si bien algunos problemas de reconocimiento de caracteres bien delimitados se encuentran resueltos (OCR, reconocimiento de dígitos escritos a mano), el reconocimiento en escenas o imágenes naturales representa un reto mayor debido a los artefactos, ruido o distractores naturales.\cite{svhn} Estas características presentan al dataset como un buen candidato para temas de machine learning.
 
 \section{Objetivos}
 \begin{itemize}
         \item Obtención de datos
         \item Preprocesamiento y Feature Engineering
-        \item Selección de modelos
+        \item Selección de modelos predictivos
         \item Cross-Validation
-        \item Entrenamiento y evaluación
+        \item Entrenamiento, evaluación y métricas de desempeño
 \end{itemize}
 
 
 \subsection{Obtención de datos}
-El dataset se obtuvo directamente de HugginFace.\cite{huggingface_svhn}
+El dataset se obtuvo directamente de HugginFace.\cite{huggingface_svhn} Se seleccionó la version ``cropped\_digits'' que enfoca un dígito al centro en cada imagen y cuenta con una sola etiqueta por imagen. Este dataset ya cuenta con los grupos de train y test, por lo que no es necesario hacer ninguna separación.
 \begin{lstlisting}[language=Python]
 from datasets import load_dataset
 ds = load_dataset("ufldl-stanford/svhn",
@@ -94,7 +94,7 @@ ds = load_dataset("ufldl-stanford/svhn",
 
 
 \subsection{Preprocesamiento y Feature Engineering}
-Debido a la complejidad del problema (dígitos en imágenes naturales a color y con distractores), es de vital importancia realizar el correcto pre-procesamiento y Feature Engineering para facilitar la tarea y rendimiento de nuestro algoritmo predictivo. Como objetivo final se busca reconocer dígitos centrados en imágenes de 32x32, como primera aproximación, se transforma y reduce la imagen a color original a bordes. Para esto, se propone la siguiente lista ordenada de pasos o transformaciones a realizar en cada muestra antes de realizar cualquier entrenamiento:
+Debido a la complejidad del problema (dígitos en imágenes naturales a color y con distractores), es de vital importancia realizar el correcto pre-procesamiento y Feature Engineering para facilitar la tarea y rendimiento de nuestro algoritmo predictivo. Como objetivo final se busca reconocer dígitos centrados en imágenes de 32x32. Se propone transformar la imagen de color original a una imagen binaria para destacar contraste y diferencias. Para esto, se implementa la siguiente lista ordenada de pasos a realizar en cada muestra antes de realizar cualquier entrenamiento:
 
 \begin{enumerate}
         \item Escala de grises: Reducción de 3 canales (RGB) a 1 canal
@@ -196,7 +196,7 @@ En los 3 casos se hicieron reducciones a 2 y 3 dimensiones, sin embargo, no fue 
         \label{fig:tsne_3d}
 \end{figure}
 
-\subsection{Selección de modelos}
+\subsection{Selección de modelos predictivos}
 Por lo visto en clase, además de los modelos para reducción de dimensiones, se consideran las siguientes opciones para experimentación:
 \begin{itemize}
         \item KNeighborsClassifier (KNN)\cite{scikit-learn-knn}
@@ -330,7 +330,7 @@ De forma similar a la sección anterior, se realizó un GridSearch para encontra
         \label{fig:comparativa_preprocesamiento}
 \end{figure}
 
-\subsection{Entrenamiento y Validación}
+\subsection{Entrenamiento, evaluación y métricas de desempeño}
 Una vez ejecutado el paso de Cross-Validation, se cuenta con un conjunto de hiperparámetros que pueden usarse para entrenar y obtener el score de nuestro modelo con los datos pre-procesados. Para esto, basta con re-utilizar el mismo Pipeline definido en la búsqueda de hiperparámetros utilizando los valores antes encontrados.
 
 \begin{lstlisting}[language=Python]
@@ -403,7 +403,7 @@ Siguiendo el ejemplo con datasets como MNIST, se experimentó con modelos no sup
 
 Las gráficas 2D y 3D en los diferentes modelos muestran dificultad para observar grupos bien definidos y separados, lo que sugiere que este problema necesita más dimensiones que las observables. Una vez se realizó CrossValidation es posible confirmar que el número de componentes con mejor redimiento es bastante alejado a las dimensiones que se pueden observar fácilmente, el hiperparámetro componentes PCA tuvo un valor final de 57.
 
-\subsection{Selección de modelos y Cross-Validation}
+\subsection{Selección de modelos predictivos y Cross-Validation}
 La aceleración con CUDA resultó crucial para este proceso, ya que las iteraciones utilizando CPU eran significativamente más lentas. Esto permitió explorar varios modelos y un rango más amplio de hiperparámetros.
 
 En todos los casos se observa claramente que se obtiene un mejor rendimiento con un número significativo de dimensiones. Esto sugiere que el dataset es complejo y necesita mucho más dimensiones que las observables a simple vista para poder representarse correctamente. A pesar de visualmente mostrar mejor separación en las gráficas 2D y 3D, UMAP no resultó ser el modelo con mejor rendimiento.
@@ -412,7 +412,7 @@ La ventaja de PCA en este caso puede sugerir que existe una relación lineal ent
 
 Los rangos limitados de exploración se deben a una falta de recursos computacionales, se encontraron problemas con UMAP en dimensiones muy altas y tSNE en particular.
 
-\subsection{Entrenamiento y Validación}
+\subsection{Entrenamiento, evaluación y métricas de desempeño}
 Se logra observar un score aceptable, \textbf{0.96} en training y \textbf{0.79} en testing. Esto sugiere que el modelo no está realizando overfitting total ni simplemente memorizando el dataset de entrenamiento, por lo que logra generalizar la relación entre los valores de los pixeles en la imagen y el dígito que se encuentra en el centro. Se reconoce que existen modelos más adecuados para reconocimiento de imagen con mucho mejor rendimiento, por ejemplo, redes neuronales. Sin embargo, estos modelos se encuentran fuera del enfoque de la clase, ya que se consideran de aprendizaje profundo.
 
 \subsection{Matriz de confusión y balanceo de dataset}
