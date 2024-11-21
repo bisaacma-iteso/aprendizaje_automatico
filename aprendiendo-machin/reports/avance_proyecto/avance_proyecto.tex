@@ -71,20 +71,20 @@
 % You must have at least 2 lines in the paragraph with the drop letter
 % (should never be an issue)
 
-El dataset SVHN representa dígitos en imágenes naturales que provienen de fotografías de casas. Detectar y leer texto en fotografías representa un problema complicado en la disciplina de visión por computadora. Si bien algunos problemas de reconocimiento de caracteres bien delimitados se encuentran resueltos (OCR, reconocimiento de dígitos escritos a mano), el reconocimiento en escenas o imágenes naturales representa un reto mayor debido a los artefactos, ruido o distractores naturales.\cite{svhn} Estas características presentan al dataset como un buen candidato para temas de machine learning.
+El dataset SVHN representa dígitos en imágenes naturales que provienen de fotografías de casas obtenidas de Google Maps. Detectar y leer texto en fotografías representa un problema complicado en la disciplina de visión por computadora. Si bien algunos problemas de reconocimiento de caracteres bien delimitados se encuentran resueltos (OCR, reconocimiento de dígitos escritos a mano), el reconocimiento en escenas o imágenes naturales representa un reto mayor debido a los artefactos, ruido o distractores naturales.\cite{svhn} Estas características presentan al dataset como un buen candidato para temas de machine learning.
 
 \section{Objetivos}
 \begin{itemize}
         \item Obtención de datos
         \item Preprocesamiento y Feature Engineering
-        \item Selección de modelos
+        \item Selección de modelos predictivos
         \item Cross-Validation
-        \item Entrenamiento y evaluación
+        \item Entrenamiento, evaluación y métricas de desempeño
 \end{itemize}
 
 
 \subsection{Obtención de datos}
-El dataset se obtuvo directamente de HugginFace.\cite{huggingface_svhn}
+El dataset se obtuvo directamente de HugginFace.\cite{huggingface_svhn} Se seleccionó la version ``cropped\_digits'' que enfoca un dígito al centro en cada imagen y cuenta con una sola etiqueta por imagen. Este dataset ya cuenta con los grupos de train y test, por lo que no es necesario hacer ninguna separación.
 \begin{lstlisting}[language=Python]
 from datasets import load_dataset
 ds = load_dataset("ufldl-stanford/svhn",
@@ -94,7 +94,7 @@ ds = load_dataset("ufldl-stanford/svhn",
 
 
 \subsection{Preprocesamiento y Feature Engineering}
-Debido a la complejidad del problema (dígitos en imágenes naturales a color y con distractores), es de vital importancia realizar el correcto pre-procesamiento y Feature Engineering para facilitar la tarea y rendimiento de nuestro algoritmo predictivo. Como objetivo final se busca reconocer dígitos centrados en imágenes de 32x32, como primera aproximación, se transforma y reduce la imagen a color original a bordes. Para esto, se propone la siguiente lista ordenada de pasos o transformaciones a realizar en cada muestra antes de realizar cualquier entrenamiento:
+Debido a la complejidad del problema (dígitos en imágenes naturales a color y con distractores), es de vital importancia realizar el correcto pre-procesamiento y Feature Engineering para facilitar la tarea y rendimiento de nuestro algoritmo predictivo. Como objetivo final se busca reconocer dígitos centrados en imágenes de 32x32. Se propone transformar la imagen de color original a una imagen binaria para destacar contraste y diferencias. Para esto, se implementa la siguiente lista ordenada de pasos a realizar en cada muestra antes de realizar cualquier entrenamiento:
 
 \begin{enumerate}
         \item Escala de grises: Reducción de 3 canales (RGB) a 1 canal
@@ -196,7 +196,7 @@ En los 3 casos se hicieron reducciones a 2 y 3 dimensiones, sin embargo, no fue 
         \label{fig:tsne_3d}
 \end{figure}
 
-\subsection{Selección de modelos}
+\subsection{Selección de modelos predictivos}
 Por lo visto en clase, además de los modelos para reducción de dimensiones, se consideran las siguientes opciones para experimentación:
 \begin{itemize}
         \item KNeighborsClassifier (KNN)\cite{scikit-learn-knn}
@@ -288,7 +288,7 @@ Se realizó un GridSearch manual inspirado en la implementación de scikit-learn
 \end{itemize}
 \end{otherlanguage}
 
-Después de evaluar todos los resultados, la combinación de modelos con mejor resultado fue \textbf{PCA y SVM} con score de \textbf{0.80}.
+Después de evaluar todos los resultados, la combinación de modelos con mejor resultado fue \textbf{PCA y SVM} con score de \textbf{0.84}.
 
 tSNE fue excluido de la búsqueda por falta de recursos computacionales.
 
@@ -330,7 +330,7 @@ De forma similar a la sección anterior, se realizó un GridSearch para encontra
         \label{fig:comparativa_preprocesamiento}
 \end{figure}
 
-\subsection{Entrenamiento y Validación}
+\subsection{Entrenamiento, evaluación y métricas de desempeño}
 Una vez ejecutado el paso de Cross-Validation, se cuenta con un conjunto de hiperparámetros que pueden usarse para entrenar y obtener el score de nuestro modelo con los datos pre-procesados. Para esto, basta con re-utilizar el mismo Pipeline definido en la búsqueda de hiperparámetros utilizando los valores antes encontrados.
 
 \begin{lstlisting}[language=Python]
@@ -379,7 +379,7 @@ Se utilió SMOTE\cite{smote2023} para balancear el dataset. La tarea de Cross-Va
 
 \begin{figure}[H]
         \centering
-        \includegraphics[width=\linewidth]{figures/confusion_matrix_Training_wSMOTE.png}
+        \includegraphics[width=\linewidth]{figures/confusion_matrix_Training_postSMOTE.png}
         \caption{Matriz de confusión, Train dataset con SMOTE}
         \label{fig:confusion_matrix_post_smote}
 \end{figure}
@@ -388,22 +388,54 @@ El dataset Test muestra el mismo comportamiento, sin embargo no se aplicó SMOTE
 
 \begin{figure}[H]
         \centering
-        \includegraphics[width=\linewidth]{figures/confusion_matrix_Testing_wSMOTE.png}
+        \includegraphics[width=\linewidth]{figures/confusion_matrix_Testing_preSMOTE.png}
         \caption{Matriz de confusión, Test dataset}
         \label{fig:confusion_matrix_test}
+\end{figure}
+
+
+\subsubsection{Ejemplos de predicciones}
+En las siguientes figuras se muestran algunas predicciones, comparando la imagen y etiqueta original con la imagen pre-procesada y predicción final. Se escogieron algunos casos en los que la predicción fue incorrecta, se observa que la predicción, a pesar de ser errónea, predice un dígito con forma similar al correcto.
+
+\begin{figure}[H]
+        \centering
+        \includegraphics[width=\linewidth]{figures/pred_example_actual_8_pred_6.png}
+        \caption{Ejemplo predicción incorrecta}
+        \label{fig:Ejemplo1}
+\end{figure}
+
+\begin{figure}[H]
+        \centering
+        \includegraphics[width=\linewidth]{figures/pred_example_actual_7_pred_7.png}
+        \caption{Ejemplo predicción correcta}
+        \label{fig:Ejemplo2}
+\end{figure}
+
+\begin{figure}[H]
+        \centering
+        \includegraphics[width=\linewidth]{figures/pred_example_actual_0_pred_6.png}
+        \caption{Ejemplo predicción incorrecta}
+        \label{fig:Ejemplo3}
+\end{figure}
+
+\begin{figure}[H]
+        \centering
+        \includegraphics[width=\linewidth]{figures/pred_example_actual_1_pred_1.png}
+        \caption{Ejemplo predicción correcta}
+        \label{fig:Ejemplo4}
 \end{figure}
 
 \section{Conclusiones}
 
 \subsection{Preprocesamiento y Feature Engineering}
-Se propone una serie de pasos para transformar de distintas formas cada muestra del dataset. Visualmente y en varios ejemplos se observa cómo cada proceso modifica la información y podría permitir una extracción o representación más concisa del objetivo final. En los esfuerzos iniciales se consideró detección de contornos, pero esta transformación fue descartada porque impactaba negativamente el rendimiento. Se demuestra también el impacto de estos pasos de preprocesamiento, ya que el score con una simple conversión a escala de grises tiene un valor bajo (0.57 vs 0.79).
+Se propone una serie de pasos para transformar de distintas formas cada muestra del dataset. Visualmente y en varios ejemplos se observa cómo cada proceso modifica la información y podría permitir una extracción o representación más concisa del objetivo final. En los esfuerzos iniciales se consideró detección de contornos, pero esta transformación fue descartada porque impactaba negativamente el rendimiento. Se demuestra también el impacto de estos pasos de preprocesamiento, ya que el score con una simple conversión a escala de grises tiene un valor bajo (0.61 vs 0.84).
 
 \subsection{Reducción de dimensionalidad}
 Siguiendo el ejemplo con datasets como MNIST, se experimentó con modelos no supervisados que ayudan a reducir las dimensiones (PCA, UMAP, tSNE). A pesar de ser un problema similar para reconocimiento de dígitos, el dataset SVHN representa complicaciones por su variedad de colores, dígitos o elementos distractores además de inconsistencia entre el color o luminosidad del fondo y dígito.
 
 Las gráficas 2D y 3D en los diferentes modelos muestran dificultad para observar grupos bien definidos y separados, lo que sugiere que este problema necesita más dimensiones que las observables. Una vez se realizó CrossValidation es posible confirmar que el número de componentes con mejor rendimiento es bastante alejado a las dimensiones que se pueden observar fácilmente, el hiperparámetro componentes PCA tuvo un valor final de 57.
 
-\subsection{Selección de modelos y Cross-Validation}
+\subsection{Selección de modelos predictivos y Cross-Validation}
 La aceleración con CUDA resultó crucial para este proceso, ya que las iteraciones utilizando CPU eran significativamente más lentas. Esto permitió explorar varios modelos y un rango más amplio de hiperparámetros.
 
 En todos los casos se observa claramente que se obtiene un mejor rendimiento con un número significativo de dimensiones. Esto sugiere que el dataset es complejo y necesita mucho más dimensiones que las observables a simple vista para poder representarse correctamente. A pesar de visualmente mostrar mejor separación en las gráficas 2D y 3D, UMAP no resultó ser el modelo con mejor rendimiento.
@@ -412,15 +444,25 @@ La ventaja de PCA en este caso puede sugerir que existe una relación lineal ent
 
 Los rangos limitados de exploración se deben a una falta de recursos computacionales, se encontraron problemas con UMAP en dimensiones muy altas y tSNE en particular.
 
-\subsection{Entrenamiento y Validación}
-Se logra observar un score aceptable, \textbf{0.96} en training y \textbf{0.79} en testing. Esto sugiere que el modelo no está realizando overfitting total ni simplemente memorizando el dataset de entrenamiento, por lo que logra generalizar la relación entre los valores de los pixeles en la imagen y el dígito que se encuentra en el centro. Se reconoce que existen modelos más adecuados para reconocimiento de imagen con mucho mejor rendimiento, por ejemplo, redes neuronales. Sin embargo, estos modelos se encuentran fuera del enfoque de la clase, ya que se consideran de aprendizaje profundo.
+\subsection{Entrenamiento, evaluación y métricas de desempeño}
+Se logra observar un score aceptable, \textbf{0.98} en training y \textbf{0.83} en testing. Esto sugiere que el modelo no está realizando overfitting total ni simplemente memorizando el dataset de entrenamiento, por lo que logra generalizar la relación entre los valores de los pixeles en la imagen y el dígito que se encuentra en el centro. Se reconoce que existen modelos más adecuados para reconocimiento de imagen con mucho mejor rendimiento, por ejemplo, redes neuronales. Sin embargo, estos modelos se encuentran fuera del enfoque de la clase, ya que se consideran de aprendizaje profundo.
 
 \subsection{Matriz de confusión y balanceo de dataset}
-Con los resultados iniciales de CrossValidation se logró observar un desbalanceo en el dataset de entrenamiento, específicamente en el dígito 1. Inicialmente se contaban con scores de \textbf{0.97} y \textbf{0.80} en training y testing respectivamente.
+Con los resultados iniciales de CrossValidation se logró observar un desbalanceo en el dataset de entrenamiento, específicamente en el dígito 1. Inicialmente se contaban con scores de \textbf{0.98} y \textbf{0.84} en training y testing respectivamente.
 
 Se aplicó SMOTE al dataset de entrenamiento para balancear el número de muestras y la distribución en las diferentes etiquetas, esto para buscar entrenar el modelo con un dataset más representativo y que sea capaz de generalizar para múltiples etiquetas, no solo la que se encuentre más representada.
 
-Los valores de score después de SMOTE bajaron a \textbf{0.96} y \textbf{0.79} en training y testing respectivamente. Esto indica un muy ligero impacto que aún mantiene valores aceptables, indicando que el modelo, con el preprocesamiento e hiperparámetros elegidos, es capaz de generalizar las relaciones entre los pixeles y el dígito encontrado al centro de la imagen.
+Los valores de score después de SMOTE bajaron a \textbf{0.98} y \textbf{0.83} en training y testing respectivamente. Esto indica un muy ligero impacto que aún mantiene valores aceptables, indicando que el modelo, con el preprocesamiento e hiperparámetros elegidos, es capaz de generalizar las relaciones entre los pixeles y el dígito encontrado al centro de la imagen.
+
+\subsection{Ejemplos de predicciones}
+Basándose en las imágenes de predicciones erróneas, podría existir una falta de optimización en la etapa de procesamiento que cause pérdida de información importante. Se observa un caso con el número cero donde esta etapa es incapaz de mantener el contraste y la forma del dígito, lo cual puede afectar el rendimiento y entrenamiento del modelo predictivo.
+
+En los limitados casos erróneos mostrados se observa que la etiqueta incorrecta cuenta con una forma similar al dígito de la etiqueta correcta, por ejemplo, un 8 y un 6. Esto puede sugerir que el modelo predictivo logra encontrar relación en la forma de ciertos grupos de pixeles.
+
+\subsection{Trabajo futuro}
+Por falta de recursos de cómputo la búsqueda de hiperparámetros no fue la más extensa, esto aplica tanto en modelos predictivos y el preprocesamiento. Se reconoce como área de oportunidad una exhaustiva exploración de parámetros y combinaciones para encontrar valores óptimos además de modificar los pasos de preprocesamiento por algo más eficiente.
+
+El rendimiento de este modelo predictivo es pobre comparado con modelos más modernos, donde en su mayoría se observa la utilización de redes neuronales\cite{paperswithcode_svhn}. Se propone experimentar con modelos de aprendizaje profundo que podrían tener un rendimiento significativamente mejor a lo presentado en este trabajo.
 
 % if have a single appendix:
 %\appendix[Proof of the Zonklar Equations]
